@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::{fs, io};
 
@@ -6,7 +7,7 @@ struct Trie {
     children: [Option<Box<Trie>>; 26],
 }
 static VOWELS: u32 = 56656000;
-//QJEARIOTNSLCUDPMHGBFYWKVXZ
+
 static ENCODING: [u32; 26] = [
     1 << 24, // A
     1 << 9,  // B
@@ -46,7 +47,7 @@ impl Trie {
 
     pub fn addword(&mut self, word: u32) -> () {
         let mut node = self;
-        for i in 0..26 {
+        for i in word.trailing_zeros()..32 - word.leading_zeros() {
             if (word >> i) & 1 == 1 {
                 node = node.addchild(i);
             }
@@ -63,18 +64,18 @@ impl Trie {
         }
     }
 
-    pub fn search(&self, used: u32, words: &mut Vec<u32>) {
+    pub fn search(&self, used: u32, words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
         if words.len() < 5 {
             if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
                 return;
             }
-            self.findword(used, words);
+            self.findword(used, words, lexicon);
         } else {
-            println!("Found combination");
+            decodewords(words, lexicon);
         }
     }
 
-    pub fn findword(&self, used: u32, words: &mut Vec<u32>) {
+    pub fn findword(&self, used: u32, words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
         let mut available1 = self.mask & !used;
         if words.len() > 0 {
             let last = words.get(words.len() - 1).unwrap();
@@ -116,7 +117,7 @@ impl Trie {
                                                     | (1 << m);
                                                 let newused = used | wordmask;
                                                 words.push(wordmask);
-                                                self.search(newused, words);
+                                                self.search(newused, words, lexicon);
                                                 words.pop();
                                             }
                                         }
@@ -137,20 +138,29 @@ fn main() {
 
     let mut words: Vec<String> = file_to_vec("wordle-nyt-allowed-guesses.txt".to_owned()).unwrap();
     words.append(&mut file_to_vec("wordle-nyt-answers-alphabetical.txt".to_owned()).unwrap());
-    let mut cooked: Vec<u32> = words
-        .iter()
-        .map(|x| encodewords(x))
-        .filter(|i| i.count_ones() == 5)
+    words = words
+        .into_iter()
+        .filter(|i| encodewords(i).count_ones() == 5)
         .collect();
+
+    let mut lexicon: HashMap<u32, String> = HashMap::with_capacity(20000);
+    words.iter().for_each(|word| {
+        let encoded = encodewords(&word);
+        match lexicon.get(&encoded) {
+            None => lexicon.insert(encoded, word.clone()),
+            Some(i) => lexicon.insert(encoded, [i.clone(), word.clone()].join("/")),
+        };
+    });
+    let mut cooked: Vec<u32> = words.iter().map(|x| encodewords(x)).collect();
     cooked.sort();
     cooked.dedup();
 
     let mut trie: Trie = Trie::new();
-    for word in cooked {
-        trie.addword(word);
+    for word in &cooked {
+        trie.addword(*word);
     }
 
-    trie.search(0, &mut Vec::new());
+    trie.search(0, &mut Vec::new(), &lexicon);
 
     println!("Elapsed: {:.2?}", now.elapsed());
 }
@@ -165,8 +175,14 @@ fn encodewords(word: &String) -> u32 {
     let mut mask: u32 = 0;
     for c in word.chars() {
         mask |= ENCODING[c as usize - 97];
-        //mask |= 1 << 26 >> (c as u32 - 96);
-        //mask |= 1 << (c as u32 - 97);
     }
     return mask;
+}
+
+fn decodewords(words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
+    let string: Vec<String> = words
+        .into_iter()
+        .map(|word| lexicon.get(word).unwrap().to_owned())
+        .collect();
+    println!("{}", string.join(" "))
 }
