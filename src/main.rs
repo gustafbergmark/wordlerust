@@ -8,7 +8,6 @@ struct Trie {
     children: [Option<Box<Trie>>; 26],
 }
 
-// vowels
 static VOWELS: u32 = 56656000;
 
 static ENCODING: [u32; 26] = [
@@ -141,12 +140,10 @@ fn main() {
 
     let mut words: Vec<String> = file_to_vec("wordle-nyt-allowed-guesses.txt".to_owned()).unwrap();
     words.append(&mut file_to_vec("wordle-nyt-answers-alphabetical.txt".to_owned()).unwrap());
-    println!("{}", words.len());
     words = words
         .into_iter()
         .filter(|i| encodewords(i).count_ones() == 5)
         .collect();
-    println!("{}", words.len());
 
     let mut lexicon: HashMap<u32, String> = HashMap::with_capacity(20000);
     words.iter().for_each(|word| {
@@ -157,12 +154,9 @@ fn main() {
         };
         //lexicon.insert(encodewords(&word), word.clone());
     });
-    println!("Elapsed: {:.2?}", now.elapsed());
     let mut cooked: Vec<u32> = words.iter().map(|x| encodewords(x)).collect();
     cooked.sort();
     cooked.dedup();
-
-    println!("Elapsed: {:.2?}", now.elapsed());
 
     let mut trie: Trie = Trie::new();
     for word in &cooked {
@@ -170,7 +164,6 @@ fn main() {
     }
 
     let starts: Vec<u32> = cooked.into_iter().filter(|word| (*word & 3) > 0).collect();
-    println!("Elapsed: {:.2?}", now.elapsed());
 
     starts
         .par_iter()
@@ -191,8 +184,6 @@ fn encodewords(word: &String) -> u32 {
     let mut mask: u32 = 0;
     for c in word.chars() {
         mask |= ENCODING[c as usize - 97];
-        //mask |= 1 << 26 >> (c as u32 - 96);
-        //mask |= 1 << (c as u32 - 97);
     }
     return mask;
 }
