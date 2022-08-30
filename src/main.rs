@@ -66,13 +66,10 @@ impl Trie {
 
     pub fn search(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
         if words.len() < 5 {
-            /*if (!used & VOWELS) == 0 {
-                return;
-            }*/
             if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
                 return;
             }
-            if words.len() > 1 {
+            if words.len() > 5 {
                 if set.contains(&used) {
                     return;
                 } else {
@@ -102,45 +99,33 @@ impl Trie {
             let trailing = last.trailing_zeros();
             available1 &= !((1 << trailing) - 1);
         }
-        if available1 == 0 {
-            return;
-        }
-        let mut unused = 0;
-        for i in 0..26 {
-            if ((used >> i) & 1) == 0 {
-                unused += 1;
-                if unused > 2 {
-                    return;
-                }
+        for i in available1.trailing_zeros()..32 - available1.leading_zeros() {
+            if (((1 << i) - 1) & !used).count_ones() >= 2 {
+                return;
             }
             if ((available1 >> i) & 1) > 0 {
-                let root2 = self.children[i].as_ref().unwrap();
-                let available2 = root2.mask & !used;
-                if available2 == 0 {
-                    continue;
-                }
-                for j in 0..26 {
+                let root2 = self.children[i as usize].as_ref().unwrap();
+                let available2 = root2.mask & !used & !((1 << i) - 1);
+
+                for j in available2.trailing_zeros()..32 - available2.leading_zeros() {
                     if ((available2 >> j) & 1) > 0 {
-                        let root3 = root2.children[j].as_ref().unwrap();
-                        let available3 = root3.mask & !used;
-                        if available3 == 0 {
-                            continue;
-                        }
-                        for k in 0..26 {
+                        let root3 = root2.children[j as usize].as_ref().unwrap();
+                        let available3 = root3.mask & !used & !((1 << j) - 1);
+
+                        for k in available3.trailing_zeros()..32 - available3.leading_zeros() {
                             if ((available3 >> k) & 1) > 0 {
-                                let root4 = root3.children[k].as_ref().unwrap();
-                                let available4 = root4.mask & !used;
-                                if available4 == 0 {
-                                    continue;
-                                }
-                                for l in 0..26 {
+                                let root4 = root3.children[k as usize].as_ref().unwrap();
+                                let available4 = root4.mask & !used & !((1 << k) - 1);
+
+                                for l in
+                                    available4.trailing_zeros()..32 - available4.leading_zeros()
+                                {
                                     if ((available4 >> l) & 1) > 0 {
-                                        let root5 = root4.children[l].as_ref().unwrap();
-                                        let available5 = root5.mask & !used;
-                                        if available5 == 0 {
-                                            continue;
-                                        }
-                                        for m in 0..26 {
+                                        let root5 = root4.children[l as usize].as_ref().unwrap();
+                                        let available5 = root5.mask & !used & !((1 << l) - 1);
+                                        for m in available5.trailing_zeros()
+                                            ..32 - available5.leading_zeros()
+                                        {
                                             if ((available5 >> m) & 1) > 0 {
                                                 let wordmask = (1 << i)
                                                     | (1 << j)
@@ -186,8 +171,8 @@ fn main() {
     trie.search(
         0,
         &mut Vec::new(),
-        //&mut HashSet::with_capacity_and_hasher(400000, BuildNoHashHasher::default()),
-        &mut HashSet::with_capacity(400000),
+        //&mut HashSet::with_capacity_and_hasher(300000, BuildNoHashHasher::default()),
+        &mut HashSet::with_capacity(300000),
     );
 
     println!("Elapsed: {:.2?}", now.elapsed());
