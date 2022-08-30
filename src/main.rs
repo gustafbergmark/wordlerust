@@ -64,35 +64,18 @@ impl Trie {
         }
     }
 
-    pub fn search(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
+    pub fn search(&self, used: u32, words: &mut Vec<u32>) {
         if words.len() < 5 {
             if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
                 return;
             }
-            if words.len() > 5 {
-                if set.contains(&used) {
-                    return;
-                } else {
-                    set.insert(used);
-                    self.findword(used, words, set);
-                }
-            } else {
-                self.findword(used, words, set);
-            }
+            self.findword(used, words);
         } else {
             println!("Found combination");
-            set.remove(&(words.get(0).unwrap() | words.get(1).unwrap()));
-            set.remove(&(words.get(0).unwrap() | words.get(1).unwrap() | words.get(2).unwrap()));
-            set.remove(
-                &(words.get(0).unwrap()
-                    | words.get(1).unwrap()
-                    | words.get(2).unwrap()
-                    | words.get(3).unwrap()),
-            );
         }
     }
 
-    pub fn findword(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
+    pub fn findword(&self, used: u32, words: &mut Vec<u32>) {
         let mut available1 = self.mask & !used;
         if words.len() > 0 {
             let last = words.get(words.len() - 1).unwrap();
@@ -134,7 +117,7 @@ impl Trie {
                                                     | (1 << m);
                                                 let newused = used | wordmask;
                                                 words.push(wordmask);
-                                                self.search(newused, words, set);
+                                                self.search(newused, words);
                                                 words.pop();
                                             }
                                         }
@@ -168,12 +151,7 @@ fn main() {
         trie.addword(word);
     }
 
-    trie.search(
-        0,
-        &mut Vec::new(),
-        //&mut HashSet::with_capacity_and_hasher(300000, BuildNoHashHasher::default()),
-        &mut HashSet::with_capacity(300000),
-    );
+    trie.search(0, &mut Vec::new());
 
     println!("Elapsed: {:.2?}", now.elapsed());
 }
