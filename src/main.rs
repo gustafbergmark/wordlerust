@@ -1,4 +1,5 @@
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::io::{BufRead, BufReader};
 use std::{fs, io};
 
@@ -9,7 +10,7 @@ struct Trie {
 
 // vowels
 static VOWELS: u32 = 56656000;
-//QJEARIOTNSLCUDPMHGBFYWKVXZ
+
 static ENCODING: [u32; 26] = [
     1 << 24, // A
     1 << 9,  // B
@@ -49,7 +50,7 @@ impl Trie {
 
     pub fn addword(&mut self, word: u32) -> () {
         let mut node = self;
-        for i in 0..26 {
+        for i in word.trailing_zeros()..32 - word.leading_zeros() {
             if (word >> i) & 1 == 1 {
                 node = node.addchild(i);
             }
@@ -66,63 +67,51 @@ impl Trie {
         }
     }
 
-    pub fn search(&self, used: u32, words: &mut Vec<u32>) {
+    pub fn search(&self, used: u32, words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
         if words.len() < 5 {
             if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
                 return;
             }
-            self.findword(used, words);
+            self.findword(used, words, lexicon);
         } else {
-            println!("Found combination");
+            decodewords(words, lexicon);
         }
     }
 
-    pub fn findword(&self, used: u32, words: &mut Vec<u32>) {
+    pub fn findword(&self, used: u32, words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
         let mut available1 = self.mask & !used;
         if words.len() > 0 {
             let last = words.get(words.len() - 1).unwrap();
             let trailing = last.trailing_zeros();
             available1 &= !((1 << trailing) - 1);
         }
-        if available1 == 0 {
-            return;
-        }
-        let mut unused = 0;
-        for i in 0..26 {
-            if ((used >> i) & 1) == 0 {
-                unused += 1;
-                if unused > 2 {
-                    return;
-                }
+        for i in available1.trailing_zeros()..32 - available1.leading_zeros() {
+            if (((1 << i) - 1) & !used).count_ones() >= 2 {
+                return;
             }
             if ((available1 >> i) & 1) > 0 {
-                let root2 = self.children[i].as_ref().unwrap();
-                let available2 = root2.mask & !used;
-                if available2 == 0 {
-                    continue;
-                }
-                for j in 0..26 {
+                let root2 = self.children[i as usize].as_ref().unwrap();
+                let available2 = root2.mask & !used & !((1 << i) - 1);
+
+                for j in available2.trailing_zeros()..32 - available2.leading_zeros() {
                     if ((available2 >> j) & 1) > 0 {
-                        let root3 = root2.children[j].as_ref().unwrap();
-                        let available3 = root3.mask & !used;
-                        if available3 == 0 {
-                            continue;
-                        }
-                        for k in 0..26 {
+                        let root3 = root2.children[j as usize].as_ref().unwrap();
+                        let available3 = root3.mask & !used & !((1 << j) - 1);
+
+                        for k in available3.trailing_zeros()..32 - available3.leading_zeros() {
                             if ((available3 >> k) & 1) > 0 {
-                                let root4 = root3.children[k].as_ref().unwrap();
-                                let available4 = root4.mask & !used;
-                                if available4 == 0 {
-                                    continue;
-                                }
-                                for l in 0..26 {
+                                let root4 = root3.children[k as usize].as_ref().unwrap();
+                                let available4 = root4.mask & !used & !((1 << k) - 1);
+
+                                for l in
+                                    available4.trailing_zeros()..32 - available4.leading_zeros()
+                                {
                                     if ((available4 >> l) & 1) > 0 {
-                                        let root5 = root4.children[l].as_ref().unwrap();
-                                        let available5 = root5.mask & !used;
-                                        if available5 == 0 {
-                                            continue;
-                                        }
-                                        for m in 0..26 {
+                                        let root5 = root4.children[l as usize].as_ref().unwrap();
+                                        let available5 = root5.mask & !used & !((1 << l) - 1);
+                                        for m in available5.trailing_zeros()
+                                            ..32 - available5.leading_zeros()
+                                        {
                                             if ((available5 >> m) & 1) > 0 {
                                                 let wordmask = (1 << i)
                                                     | (1 << j)
@@ -131,7 +120,7 @@ impl Trie {
                                                     | (1 << m);
                                                 let newused = used | wordmask;
                                                 words.push(wordmask);
-                                                self.search(newused, words);
+                                                self.search(newused, words, lexicon);
                                                 words.pop();
                                             }
                                         }
@@ -152,23 +141,40 @@ fn main() {
 
     let mut words: Vec<String> = file_to_vec("wordle-nyt-allowed-guesses.txt".to_owned()).unwrap();
     words.append(&mut file_to_vec("wordle-nyt-answers-alphabetical.txt".to_owned()).unwrap());
-    let mut cooked: Vec<u32> = words
-        .iter()
-        .map(|x| encodewords(x))
-        .filter(|i| i.count_ones() == 5)
+    println!("{}", words.len());
+    words = words
+        .into_iter()
+        .filter(|i| encodewords(i).count_ones() == 5)
         .collect();
+    println!("{}", words.len());
+
+    let mut lexicon: HashMap<u32, String> = HashMap::with_capacity(20000);
+    words.iter().for_each(|word| {
+        let encoded = encodewords(&word);
+        match lexicon.get(&encoded) {
+            None => lexicon.insert(encoded, word.clone()),
+            Some(i) => lexicon.insert(encoded, [i.clone(), word.clone()].join("/")),
+        };
+        //lexicon.insert(encodewords(&word), word.clone());
+    });
+    println!("Elapsed: {:.2?}", now.elapsed());
+    let mut cooked: Vec<u32> = words.iter().map(|x| encodewords(x)).collect();
     cooked.sort();
     cooked.dedup();
+
+    println!("Elapsed: {:.2?}", now.elapsed());
 
     let mut trie: Trie = Trie::new();
     for word in &cooked {
         trie.addword(*word);
     }
+
     let starts: Vec<u32> = cooked.into_iter().filter(|word| (*word & 3) > 0).collect();
+    println!("Elapsed: {:.2?}", now.elapsed());
 
     starts
         .par_iter()
-        .for_each(|word| trie.search(*word, &mut vec![*word]));
+        .for_each(|word| trie.search(*word, &mut vec![*word], &lexicon));
 
     //trie.search(0, &mut Vec::new());
 
@@ -189,4 +195,12 @@ fn encodewords(word: &String) -> u32 {
         //mask |= 1 << (c as u32 - 97);
     }
     return mask;
+}
+
+fn decodewords(words: &mut Vec<u32>, lexicon: &HashMap<u32, String>) {
+    let string: Vec<String> = words
+        .into_iter()
+        .map(|word| lexicon.get(word).unwrap().to_owned())
+        .collect();
+    println!("{}", string.join(" "))
 }
