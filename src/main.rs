@@ -68,7 +68,7 @@ impl Trie {
 
     pub fn search(&self, used: u32, words: &mut Vec<u32>) {
         if words.len() < 5 {
-            if (!used & VOWELS) == 0 {
+            if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
                 return;
             }
             self.findword(used, words);
