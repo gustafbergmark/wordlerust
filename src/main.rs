@@ -6,6 +6,7 @@ struct Trie {
     mask: u32,
     children: [Option<Box<Trie>>; 26],
 }
+static VOWELS: u32 = 56656000;
 //QJEARIOTNSLCUDPMHGBFYWKVXZ
 static ENCODING: [u32; 26] = [
     1 << 24, // A
@@ -65,6 +66,12 @@ impl Trie {
 
     pub fn search(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
         if words.len() < 5 {
+            /*if (!used & VOWELS) == 0 {
+                return;
+            }*/
+            if (!used & VOWELS).count_ones() < (5 - words.len()) as u32 {
+                return;
+            }
             if words.len() > 1 {
                 if set.contains(&used) {
                     return;
