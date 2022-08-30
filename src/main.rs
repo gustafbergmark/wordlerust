@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use rayon::prelude::*;
 use std::io::{BufRead, BufReader};
 use std::{fs, io};
 
@@ -6,6 +6,9 @@ struct Trie {
     mask: u32,
     children: [Option<Box<Trie>>; 26],
 }
+
+// vowels
+static VOWELS: u32 = 56656000;
 //QJEARIOTNSLCUDPMHGBFYWKVXZ
 static ENCODING: [u32; 26] = [
     1 << 24, // A
@@ -63,32 +66,18 @@ impl Trie {
         }
     }
 
-    pub fn search(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
+    pub fn search(&self, used: u32, words: &mut Vec<u32>) {
         if words.len() < 5 {
-            if words.len() > 1 {
-                if set.contains(&used) {
-                    return;
-                } else {
-                    set.insert(used);
-                    self.findword(used, words, set);
-                }
-            } else {
-                self.findword(used, words, set);
+            if (!used & VOWELS) == 0 {
+                return;
             }
+            self.findword(used, words);
         } else {
             println!("Found combination");
-            set.remove(&(words.get(0).unwrap() | words.get(1).unwrap()));
-            set.remove(&(words.get(0).unwrap() | words.get(1).unwrap() | words.get(2).unwrap()));
-            set.remove(
-                &(words.get(0).unwrap()
-                    | words.get(1).unwrap()
-                    | words.get(2).unwrap()
-                    | words.get(3).unwrap()),
-            );
         }
     }
 
-    pub fn findword(&self, used: u32, words: &mut Vec<u32>, set: &mut HashSet<u32>) {
+    pub fn findword(&self, used: u32, words: &mut Vec<u32>) {
         let mut available1 = self.mask & !used;
         if words.len() > 0 {
             let last = words.get(words.len() - 1).unwrap();
@@ -142,7 +131,7 @@ impl Trie {
                                                     | (1 << m);
                                                 let newused = used | wordmask;
                                                 words.push(wordmask);
-                                                self.search(newused, words, set);
+                                                self.search(newused, words);
                                                 words.pop();
                                             }
                                         }
@@ -172,16 +161,16 @@ fn main() {
     cooked.dedup();
 
     let mut trie: Trie = Trie::new();
-    for word in cooked {
-        trie.addword(word);
+    for word in &cooked {
+        trie.addword(*word);
     }
+    let starts: Vec<u32> = cooked.into_iter().filter(|word| (*word & 3) > 0).collect();
 
-    trie.search(
-        0,
-        &mut Vec::new(),
-        //&mut HashSet::with_capacity_and_hasher(400000, BuildNoHashHasher::default()),
-        &mut HashSet::with_capacity(400000),
-    );
+    starts
+        .par_iter()
+        .for_each(|word| trie.search(*word, &mut vec![*word]));
+
+    //trie.search(0, &mut Vec::new());
 
     println!("Elapsed: {:.2?}", now.elapsed());
 }
